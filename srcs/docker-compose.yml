@@ -1,0 +1,52 @@
+version : '3.7'
+
+services:
+  go:
+    container_name: go
+    build: ./requirements/go
+    ports:
+      - "80:80"
+      - "9090:9090"
+    volumes:
+      - go:/srcs
+    networks:
+      - balance
+    #depends_on:
+    #  - wordpress
+    #env_file: .env
+    #restart: always
+
+  mariadb:
+    container_name: mariadb
+    build: ./requirements/mariadb
+    volumes:
+      - mariadb:/var/lib/mysql
+    networks:
+      - balance
+    ports:
+      - "3306:3306"
+    #depends_on:
+    #  - wordpress
+    env_file: .env
+    restart: always
+
+
+networks:
+  balance:
+    driver: bridge
+
+volumes:
+  go:
+    driver: local
+    driver_opts:
+      device: /home/barcher/data/go_volume
+      o: bind
+      type: none
+
+  mariadb:
+    driver: local
+    driver_opts:
+      device: /home/barcher/data/mariadb_volume
+      o: bind
+      type: none
+
