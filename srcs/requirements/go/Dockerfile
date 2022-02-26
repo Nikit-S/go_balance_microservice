@@ -21,5 +21,4 @@ ENV PATH="/usr/local/go/bin:${PATH}"
 EXPOSE 80
 
 WORKDIR "./srcs/"
-RUN go build -mod=vendor main.go
-CMD ./main
+CMD go build -mod=vendor main.go; ./main

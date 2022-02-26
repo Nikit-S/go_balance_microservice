@@ -5,16 +5,15 @@ services:
     container_name: go
     build: ./requirements/go
     ports:
-      - "80:80"
       - "9090:9090"
     volumes:
       - go:/srcs
     networks:
       - balance
-    #depends_on:
-    #  - wordpress
-    #env_file: .env
-    #restart: always
+    depends_on:
+      - mariadb
+    env_file: .env
+    restart: always
 
   mariadb:
     container_name: mariadb

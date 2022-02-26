@@ -1,9 +1,11 @@
 package handlers
 
 import (
+	"encoding/json"
 	"log"
 	"net/http"
 
+	"github.com/Nikit-S/micro/balance-api/data/balance"
 	"github.com/Nikit-S/micro/balance-api/data/transaction"
 )
 
@@ -15,28 +17,20 @@ func NewBalanceLog(l *log.Logger) *BalanceLog {
 	return &BalanceLog{l}
 }
 
-func (bl *BalanceLog) ServeHTTP(responsew http.ResponseWriter, request *http.Request) {
+func (blh *BalanceLog) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 
-	switch request.Method {
+	switch r.Method {
 	case http.MethodGet:
-		bl.l.Printf("Got a balancelog MethodGet request\n")
-		id := getId(responsew, request)
-		//bl.l.Printf("ID: %s\n", id)
-		bl.getBalanceLog(id, responsew, request)
-	case http.MethodPost:
-		bl.l.Printf("Got a balancelog MethodPost request\n")
-	case http.MethodPut:
-		bl.l.Printf("Got a balancelog MethodPut request\n")
+		blh.l.Printf("Got a balancelog MethodGet request\n")
+		bal := &balance.Balance{}
+		e := json.NewDecoder(r.Body)
+		e.Decode(bal)
+		err := transaction.GetTransactionsByUserId(bal.UserID, rw).ToJSON(rw)
+		if err != nil {
+			http.Error(rw, "Unable to marshal json", http.StatusInternalServerError)
+		}
 	default:
-		bl.l.Printf("Got a balancelog default request\n")
-
+		blh.l.Printf("Got a balance default request\n")
+		http.Error(rw, "Invalid method", http.StatusMethodNotAllowed)
 	}
-
-	//fmt.Fprintf(responsew, "You have sent me a balance request with body: %s\n", body)
-}
-
-func (bl *BalanceLog) getBalanceLog(id int, responsew http.ResponseWriter, request *http.Request) error {
-	bllist := transaction.GetTransactionsByUserId(id, responsew)
-	bllist.ToJSON(responsew)
-	return nil
 }

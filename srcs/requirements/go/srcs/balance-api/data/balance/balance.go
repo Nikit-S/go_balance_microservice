@@ -1,6 +1,7 @@
 package balance
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -8,12 +9,13 @@ import (
 	"strconv"
 
 	"github.com/Nikit-S/micro/balance-api/db"
+	"github.com/shopspring/decimal"
 )
 
 type Balance struct {
-	ID      int `json:"id"`
-	UserID  int `json:"user_id"`
-	Balance int `json:"balance"`
+	ID      int             `json:"id"`
+	UserID  int             `json:"user_id"`
+	Balance decimal.Decimal `json:"balance"`
 }
 
 type Balances []*Balance
@@ -67,19 +69,35 @@ func GetBalanceList(responsew http.ResponseWriter) *Balances {
 func GetBalance(id int, responsew http.ResponseWriter) *Balance {
 	qu := "SELECT * FROM avito.balance WHERE id = " + strconv.Itoa(id)
 	db.DB.L.Println("Querry:", qu)
-	res, err := db.DB.Database.Query(qu)
+	tx, err := db.DB.Database.Begin()
+
 	if err != nil {
-		db.DB.L.Println("Querry:", err.Error())
+		db.DB.L.Println("Begin:", err.Error())
 		http.Error(responsew, err.Error(), http.StatusBadRequest)
 		return nil
 	}
 
-	defer res.Close()
+	defer tx.Rollback()
+
 	b := &Balance{}
+	res, err := tx.Query(qu)
+	if err != nil {
+		db.DB.L.Println("Err Query:", err.Error())
+		http.Error(responsew, err.Error(), http.StatusBadRequest)
+		return nil
+	}
 	res.Next()
 	err = res.Scan(&b.ID, &b.UserID, &b.Balance)
+	res.Close()
 	if err != nil {
 		db.DB.L.Println("Scan: ", err.Error())
+		http.Error(responsew, err.Error(), http.StatusInternalServerError)
+		return nil
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		db.DB.L.Println("Commit: ", err.Error())
 		http.Error(responsew, err.Error(), http.StatusInternalServerError)
 		return nil
 	}
@@ -88,19 +106,19 @@ func GetBalance(id int, responsew http.ResponseWriter) *Balance {
 }
 
 func GetBalanceByUserId(id int, responsew http.ResponseWriter) *Balance {
-	qu := "SELECT * FROM avito.balance WHERE user_id = " + strconv.Itoa(id)
-	db.DB.L.Println("Querry:", qu)
+	qu := fmt.Sprintf("SELECT * FROM avito.balance WHERE user_id = %d", id)
+	db.DB.L.Println("Query:", qu)
 	res, err := db.DB.Database.Query(qu)
 	if err != nil {
-		db.DB.L.Println("Querry:", err.Error())
+		db.DB.L.Println("Err Query:", err.Error())
 		//http.Error(responsew, err.Error(), http.StatusBadRequest)
 		return nil
 	}
-
 	defer res.Close()
 	b := &Balance{}
 	res.Next()
 	err = res.Scan(&b.ID, &b.UserID, &b.Balance)
+
 	if err != nil {
 		db.DB.L.Println("Scan: ", err.Error())
 		//http.Error(responsew, err.Error(), http.StatusInternalServerError)
@@ -109,28 +127,47 @@ func GetBalanceByUserId(id int, responsew http.ResponseWriter) *Balance {
 	return b
 }
 
-func AddBalance(b int, userid int, responsew http.ResponseWriter) {
-	query := fmt.Sprintf("INSERT INTO avito.balance (user_id, balance) VALUES(%d, %d);", userid, b)
-	db.DB.L.Println("Querry:", query)
-	res, err := db.DB.Database.Query(query)
+func GetBalanceByUserIdTx(id int, responsew http.ResponseWriter, tx *sql.Tx) *Balance {
+	qu := fmt.Sprintf("SELECT * FROM avito.balance WHERE user_id = %d FOR UPDATE", id)
+	db.DB.L.Println("Querry:", qu)
+	res, err := tx.Query(qu)
 	if err != nil {
-		db.DB.L.Println("Querry:", err.Error())
-		http.Error(responsew, err.Error(), http.StatusBadRequest)
+		db.DB.L.Println("Err Querry:", err.Error())
+		return nil
 	}
 
-	defer res.Close()
-
+	b := &Balance{}
+	res.Next()
+	err = res.Scan(&b.ID, &b.UserID, &b.Balance)
+	res.Close()
+	if err != nil {
+		db.DB.L.Println("Err Scan: ", err.Error())
+		return nil
+	}
+	return b
 }
 
-func (b *Balance) Update(responsew http.ResponseWriter) {
-	query := fmt.Sprintf("UPDATE avito.balance SET balance=%d WHERE id=%d AND user_id=%d;", b.Balance, b.ID, b.UserID)
+func AddBalance(b decimal.Decimal, userid int, tx *sql.Tx) error {
+	query := fmt.Sprintf("INSERT INTO avito.balance (user_id, balance) VALUES(%d, %s);", userid, b.String())
 	db.DB.L.Println("Querry:", query)
-	res, err := db.DB.Database.Query(query)
-	if err != nil {
-		db.DB.L.Println("Querry:", err.Error())
-		http.Error(responsew, err.Error(), http.StatusBadRequest)
-	}
+	res, err := tx.Query(query)
 	defer res.Close()
+	if err != nil {
+		db.DB.L.Println("Err Query:", err.Error())
+		return err
+	}
+	return nil
+}
+
+func (b *Balance) Update(tx *sql.Tx) error {
+	query := fmt.Sprintf("UPDATE avito.balance SET balance=%s WHERE id=%d AND user_id=%d;", b.Balance.String(), b.ID, b.UserID)
+	res, err := tx.Query(query)
+	if err != nil {
+		db.DB.L.Println("Err Query:", err.Error())
+		return err
+	}
+	res.Close()
+	return nil
 }
 
 var ErorTransactionLimit = fmt.Errorf("Transaction amount exceeded balance amount")
@@ -144,15 +181,4 @@ func getNextID() int {
 	return lp.ID + 1
 }
 
-var BalanceList = Balances{
-	&Balance{
-		ID:      1,
-		Balance: 10000,
-		UserID:  234,
-	},
-	&Balance{
-		ID:      2,
-		Balance: 20000,
-		UserID:  24,
-	},
-}
+var BalanceList = Balances{}

@@ -1,11 +1,16 @@
 package handlers
 
 import (
+	"database/sql"
+	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 
 	"github.com/Nikit-S/micro/balance-api/data/balance"
 	"github.com/Nikit-S/micro/balance-api/data/transaction"
+	"github.com/Nikit-S/micro/balance-api/db"
+	"github.com/shopspring/decimal"
 )
 
 type Transaction struct {
@@ -16,58 +21,52 @@ func NewTransaction(l *log.Logger) *Transaction {
 	return &Transaction{l}
 }
 
-func (t *Transaction) ServeHTTP(responsew http.ResponseWriter, request *http.Request) {
+func (th *Transaction) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 
-	switch request.Method {
+	switch r.Method {
 	case http.MethodGet:
-		t.l.Printf("Got a balance MethodGet request\n")
-		id := getId(responsew, request)
-		//transaction.l.Printf("ID: %s\n", id)
-		t.getTransaction(id, responsew, request)
+		th.l.Printf("Got a transaction MethodGet request\n")
+		t := &transaction.Transaction{}
+		err := json.NewDecoder(r.Body).Decode(t)
+		if err != nil {
+			http.Error(rw, "Unable to marshal json", http.StatusInternalServerError)
+		}
+		th.getTransaction(t.ID, rw, r)
 	case http.MethodPost:
-		t.l.Printf("Got a balance MethodPost request\n")
-		t.addTransaction(responsew, request)
-	case http.MethodPut:
-		t.l.Printf("Got a balance MethodPut request\n")
+		th.l.Printf("Got a transaction MethodPost request\n")
+		t := th.addTransaction(rw, r)
+		tx, err := db.DB.Database.Begin()
+		if err != nil {
+			db.DB.L.Println("Begin:", err.Error())
+			http.Error(rw, "Connection to mysql:", http.StatusInternalServerError)
+		}
+		err = th.execTransaction(t, rw, tx)
+		if err != nil {
+			db.DB.L.Println("Transfer:", err.Error())
+		}
+		t.ToJSON(rw)
 	default:
-		t.l.Printf("Got a balance default request\n")
+		th.l.Printf("Got a transaction default request\n")
+		http.Error(rw, "Invalid method", http.StatusMethodNotAllowed)
 	}
-	//fmt.Fprintf(responsew, "You have sent me a transaction request with body: %s\n", body)
 }
 
-func (trans *Transaction) addTransaction(rw http.ResponseWriter, r *http.Request) {
+func (trans *Transaction) addTransaction(rw http.ResponseWriter, r *http.Request) *transaction.Transaction {
 	trans.l.Println("POST (add Transaction)")
-
-	product := &transaction.Transaction{}
-
-	err := product.FromJSON(r.Body)
+	t := &transaction.Transaction{}
+	err := t.FromJSON(r.Body)
 	if err != nil {
 		http.Error(rw, "Unable to UNmarshal json", http.StatusBadRequest)
 	}
+	transaction.AddTransaction(t, rw)
+	return t
 
-	transaction.AddTransaction(product, rw)
-	//trans.l.Println("Transaction added")
-	trans.execTransaction(product, rw)
-	product.ToJSON(rw)
-	//trans.l.Printf("Product: %#v", product.Status)
-
-}
-
-func (t *Transaction) getTransactionList(responsew http.ResponseWriter, request *http.Request) {
-	transactionlist := transaction.GetTransactionList()
-
-	err := transactionlist.ToJSON(responsew)
-	if err != nil {
-		http.Error(responsew, "Unable to marshal json", http.StatusInternalServerError)
-	}
 }
 
 func (t *Transaction) getTransaction(id int, responsew http.ResponseWriter, request *http.Request) {
 	transactionlist := transaction.GetTransaction(id, responsew)
-
 	if transactionlist == nil {
 		http.Error(responsew, "Id is out of ramge", http.StatusInternalServerError)
-		return
 	}
 	err := transactionlist.ToJSON(responsew)
 	if err != nil {
@@ -75,21 +74,89 @@ func (t *Transaction) getTransaction(id int, responsew http.ResponseWriter, requ
 	}
 }
 
-func (t *Transaction) execTransaction(trans *transaction.Transaction, rw http.ResponseWriter) error {
-	//t.l.Println("Exec trans")
-	b := balance.GetBalanceByUserId(trans.UserID, rw)
-	if b == nil && trans.Amount > 0 {
-		t.l.Println("Gonna make a balance")
-		balance.AddBalance(trans.Amount, trans.UserID, rw)
-		trans.Status = 1
-		trans.Update(rw)
+func (th *Transaction) execTransaction(t *transaction.Transaction, rw http.ResponseWriter, tx *sql.Tx) error {
+	bt := balance.GetBalanceByUserIdTx(t.UserID, rw, tx)
+	th.l.Println("Exec transaction")
+	if t.From == "balance" {
+		if t.UserID == t.FromID {
+			th.l.Println("Self balance")
+			tx.Commit()
+			return nil
+		}
+		err := th.fromBalance(t, rw, tx)
+		if err != nil {
+			return err
+		}
 	}
-	if b != nil && trans.Amount+b.Balance >= 0 {
-		//t.l.Println("Gonna make a transaction")
-		b.Balance += trans.Amount
-		b.Update(rw)
-		trans.Status = 1
-		trans.Update(rw)
+	if bt == nil && t.Amount.Cmp(decimal.Zero) == +1 {
+		err := th.createBalance(t, rw, tx)
+		if err != nil {
+			return err
+		}
+		return nil
+	} else if bt != nil && !decimal.Sum(t.Amount, bt.Balance).LessThan(decimal.Zero) {
+		err := th.makeTransaction(t, rw, tx, bt)
+		if err != nil {
+			return err
+		}
+		return nil
+	}
+	tx.Rollback()
+	return fmt.Errorf("something went wrong")
+}
+
+func (th *Transaction) makeTransaction(t *transaction.Transaction, rw http.ResponseWriter, tx *sql.Tx, bt *balance.Balance) error {
+	bt.Balance = bt.Balance.Add(t.Amount)
+	err := bt.Update(tx)
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+	t.Status = 1
+	err = t.Update()
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+	tx.Commit()
+	return nil
+}
+
+func (th *Transaction) createBalance(t *transaction.Transaction, rw http.ResponseWriter, tx *sql.Tx) error {
+	th.l.Println("Gonna make a balance")
+	err := balance.AddBalance(t.Amount, t.UserID, tx)
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+	t.Status = 1
+	err = t.Update()
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+	tx.Commit()
+	return nil
+}
+
+func (th *Transaction) fromBalance(t *transaction.Transaction, rw http.ResponseWriter, tx *sql.Tx) error {
+	bf := balance.GetBalanceByUserIdTx(t.FromID, rw, tx)
+	if bf == nil {
+		http.Error(rw, "Get balance:", http.StatusNotFound)
+		tx.Commit()
+		return fmt.Errorf("No balance %d", t.UserID)
+	}
+	t.Amount = t.Amount.Abs()
+	if bf.Balance.Cmp(t.Amount) == -1 {
+		http.Error(rw, "Sender Balance < Transaction Amount:", http.StatusForbidden)
+		tx.Commit()
+		return fmt.Errorf("Sender Balance < Transaction Amount")
+	}
+	bf.Balance = bf.Balance.Sub(t.Amount)
+	err := bf.Update(tx)
+	if err != nil {
+		tx.Rollback()
+		return err
 	}
 	return nil
 }
