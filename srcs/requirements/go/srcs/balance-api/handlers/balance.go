@@ -31,7 +31,6 @@ func (bh *Balance) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 			http.Error(rw, "Wrong json format", http.StatusBadRequest)
 			return
 		}
-		bh.l.Printf("bal user_id: %d\n", b.UserID)
 		err = balance.GetBalanceByUserId(b.UserID, rw).ToJSON(rw)
 		if err != nil {
 			http.Error(rw, "Unable to marshal json", http.StatusInternalServerError)

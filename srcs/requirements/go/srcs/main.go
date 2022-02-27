@@ -14,9 +14,9 @@ import (
 
 func main() {
 
-	l := log.New(os.Stdout, "balance-api ", log.LstdFlags)
+	l := log.New(os.Stdout, "balance-api ", log.LstdFlags) //создание логирования
 
-	db.ConnectDB(l)
+	db.ConnectDB(l) // подключение к базе данных
 
 	defer db.DB.Database.Close()
 	servemux := http.NewServeMux()
@@ -25,11 +25,11 @@ func main() {
 	balanceloghandler := handlers.NewBalanceLog(l)
 	transactionhandler := handlers.NewTransaction(l)
 
-	servemux.Handle("/balance/", balancehandler)
-	servemux.Handle("/balancelog/", balanceloghandler)
-	servemux.Handle("/transaction/", transactionhandler)
+	servemux.Handle("/balance/", balancehandler)         //прослушка для метода запроса баланса
+	servemux.Handle("/balancelog/", balanceloghandler)   //прослушка для метода запроса списка транзакций
+	servemux.Handle("/transaction/", transactionhandler) //прослушка для метода проведения тразакций
 
-	server := &http.Server{
+	server := &http.Server{ //настройки сервера
 		Addr:         os.Getenv("SERVICE_HOST") + ":" + os.Getenv("SERVICE_PORT"),
 		ReadTimeout:  1 * time.Second,
 		WriteTimeout: 1 * time.Second,
@@ -41,7 +41,7 @@ func main() {
 			l.Fatal(err)
 		}
 	}()
-	sigChan := make(chan os.Signal)
+	sigChan := make(chan os.Signal) //плавное отключение за 30 секунд
 	signal.Notify(sigChan, os.Interrupt)
 	signal.Notify(sigChan, os.Kill)
 	sig := <-sigChan
