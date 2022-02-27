@@ -42,3 +42,5 @@
 в случае успеха возвращает запись о транзакции, где значение ```status``` отвечает за успех или неуспех поданой заявки на проведение транзакции
 ### balancelog
 ```curl localhost:9090/balancelog/ -XGET -d '{"user_id":1}'``` — возвращает запись о балансе с user_id=1 (НЕ id)
+
+ТЗ: https://github.com/avito-tech/autumn-2021-intern-assignment
