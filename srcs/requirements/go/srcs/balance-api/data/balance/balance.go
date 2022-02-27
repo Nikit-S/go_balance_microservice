@@ -13,9 +13,9 @@ import (
 )
 
 type Balance struct {
-	ID      int             `json:"id"`
-	UserID  int             `json:"user_id"`
-	Balance decimal.Decimal `json:"balance"`
+	ID      int             `json:"id" validate:"-"`
+	UserID  int             `json:"user_id" validate:"numeric,gte=1"`
+	Balance decimal.Decimal `json:"balance" validate:"numeric"`
 }
 
 type Balances []*Balance

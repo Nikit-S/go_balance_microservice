@@ -11,13 +11,13 @@ import (
 )
 
 type Transaction struct {
-	ID      int             `json:"id"`
-	UserID  int             `json:"user_id"`
-	Amount  decimal.Decimal `json:"amount"`
-	Status  int             `json:"status"`
-	From    string          `json:"from"`
-	FromID  int             `json:"from_id"`
-	Comment string          `json:"comment"`
+	ID      int             `json:"id" validate:"-"`
+	UserID  int             `json:"user_id" validate:"required,numeric,gte=1"`
+	Amount  decimal.Decimal `json:"amount" validate:"required,numeric"`
+	Status  int             `json:"status" validate:"-"`
+	From    string          `json:"from" validate:"required"`
+	FromID  int             `json:"from_id" validate:"-"`
+	Comment string          `json:"comment" validate:"-"`
 }
 
 type Transactions []*Transaction

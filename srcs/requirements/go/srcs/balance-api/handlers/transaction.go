@@ -10,6 +10,7 @@ import (
 	"github.com/Nikit-S/micro/balance-api/data/balance"
 	"github.com/Nikit-S/micro/balance-api/data/transaction"
 	"github.com/Nikit-S/micro/balance-api/db"
+	"github.com/go-playground/validator"
 	"github.com/shopspring/decimal"
 )
 
@@ -31,10 +32,18 @@ func (th *Transaction) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			http.Error(rw, "Unable to marshal json", http.StatusInternalServerError)
 		}
+		err = th.validateRequest(t)
+		if err != nil {
+			http.Error(rw, "Wrong json format", http.StatusBadRequest)
+			return
+		}
 		th.getTransaction(t.ID, rw, r)
 	case http.MethodPost:
 		th.l.Printf("Got a transaction MethodPost request\n")
 		t := th.addTransaction(rw, r)
+		if t == nil {
+			return
+		}
 		tx, err := db.DB.Database.Begin()
 		if err != nil {
 			db.DB.L.Println("Begin:", err.Error())
@@ -51,13 +60,44 @@ func (th *Transaction) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (trans *Transaction) addTransaction(rw http.ResponseWriter, r *http.Request) *transaction.Transaction {
-	trans.l.Println("POST (add Transaction)")
+func (th *Transaction) validateRequest(t *transaction.Transaction) error {
+	validate := validator.New()
+	err := validate.Struct(t)
+	if err != nil {
+		if _, ok := err.(*validator.InvalidValidationError); ok {
+			fmt.Println(err)
+			return err
+		}
+
+		th.l.Println("------ List of tag fields with error ---------")
+
+		for _, err := range err.(validator.ValidationErrors) {
+			fmt.Println(err.StructField())
+			fmt.Println(err.ActualTag())
+			fmt.Println(err.Kind())
+			fmt.Println(err.Value())
+			fmt.Println(err.Param())
+			fmt.Println("---------------")
+		}
+		return err
+	}
+	return nil
+}
+
+func (th *Transaction) addTransaction(rw http.ResponseWriter, r *http.Request) *transaction.Transaction {
+	th.l.Println("POST (add Transaction)")
 	t := &transaction.Transaction{}
 	err := t.FromJSON(r.Body)
 	if err != nil {
 		http.Error(rw, "Unable to UNmarshal json", http.StatusBadRequest)
+		return nil
 	}
+	err = th.validateRequest(t)
+	if err != nil {
+		http.Error(rw, "Wrong json format", http.StatusBadRequest)
+		return nil
+	}
+	th.l.Println("body is valid")
 	transaction.AddTransaction(t, rw)
 	return t
 
