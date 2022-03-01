@@ -82,7 +82,7 @@ func GetTransactionsByUserId(id int, responsew http.ResponseWriter) *Transaction
 		err = res.Scan(&t.ID, &t.UserID, &t.Amount, &t.Status, &t.From, &t.FromID, &t.Comment)
 		if err != nil {
 			db.DB.L.Println("Scan: ", err.Error())
-			http.Error(responsew, err.Error(), http.StatusInternalServerError)
+			http.Error(responsew, err.Error(), http.StatusInternalServerError) // http.StatusBadRequest
 			return nil
 		}
 		*ts = append(*ts, t)
@@ -93,9 +93,8 @@ func GetTransactionsByUserId(id int, responsew http.ResponseWriter) *Transaction
 
 func AddTransaction(trans *Transaction, responsew http.ResponseWriter) error {
 
-	query := fmt.Sprintf("INSERT INTO avito.transaction (user_id, amount, status, `from`, from_id, comment) VALUES(%d, %s, %d, '%s', %d, '%s');", trans.UserID, trans.Amount.String(), trans.Status, trans.From, trans.FromID, trans.Comment)
-	db.DB.L.Println("Querry:", query)
-	res, err := db.DB.Database.Exec(query)
+	//db.DB.L.Println("Querry:", query)
+	res, err := db.DB.Database.Exec("INSERT INTO avito.transaction (user_id, amount, status, `from`, from_id, comment) VALUES(?, ?, ?, ?, ?, ?);", trans.UserID, trans.Amount.String(), trans.Status, trans.From, trans.FromID, trans.Comment)
 	if err != nil {
 		db.DB.L.Println("Querry:", err.Error())
 		http.Error(responsew, err.Error(), http.StatusBadRequest)

@@ -80,7 +80,7 @@ func GetBalance(id int, responsew http.ResponseWriter) *Balance {
 	defer tx.Rollback()
 
 	b := &Balance{}
-	res, err := tx.Query(qu)
+	res, err := tx.Query(qu) //timeout retry
 	if err != nil {
 		db.DB.L.Println("Err Query:", err.Error())
 		http.Error(responsew, err.Error(), http.StatusBadRequest)

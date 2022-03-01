@@ -30,7 +30,7 @@ func (th *Transaction) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		t := &transaction.Transaction{}
 		err := json.NewDecoder(r.Body).Decode(t)
 		if err != nil {
-			http.Error(rw, "Unable to marshal json", http.StatusInternalServerError)
+			http.Error(rw, "Unable to marshal json", http.StatusInternalServerError) //http.StatusBadRequest
 		}
 		err = th.validateRequest(t)
 		if err != nil {
@@ -56,7 +56,7 @@ func (th *Transaction) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		t.ToJSON(rw)
 	default:
 		th.l.Printf("Got a transaction default request\n")
-		http.Error(rw, "Invalid method", http.StatusMethodNotAllowed)
+		http.Error(rw, "Invalid method", http.StatusMethodNotAllowed) //http.StatusBadRequest
 	}
 }
 
