@@ -30,7 +30,7 @@ func (th *Transaction) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		t := &transaction.Transaction{}
 		err := json.NewDecoder(r.Body).Decode(t)
 		if err != nil {
-			http.Error(rw, "Unable to marshal json", http.StatusInternalServerError) //http.StatusBadRequest
+			http.Error(rw, "Unable to marshal json", http.StatusBadRequest) //http.StatusBadRequest
 		}
 		err = th.validateRequest(t)
 		if err != nil {
@@ -47,7 +47,7 @@ func (th *Transaction) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		tx, err := db.DB.Database.Begin()
 		if err != nil {
 			db.DB.L.Println("Begin:", err.Error())
-			http.Error(rw, "Connection to mysql:", http.StatusInternalServerError)
+			http.Error(rw, "Connection to mysql:", http.StatusBadRequest)
 		}
 		err = th.execTransaction(t, rw, tx)
 		if err != nil {
@@ -56,7 +56,7 @@ func (th *Transaction) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		t.ToJSON(rw)
 	default:
 		th.l.Printf("Got a transaction default request\n")
-		http.Error(rw, "Invalid method", http.StatusMethodNotAllowed) //http.StatusBadRequest
+		http.Error(rw, "Invalid method", http.StatusMethodNotAllowed)
 	}
 }
 
@@ -106,11 +106,11 @@ func (th *Transaction) addTransaction(rw http.ResponseWriter, r *http.Request) *
 func (t *Transaction) getTransaction(id int, responsew http.ResponseWriter, request *http.Request) {
 	transactionlist := transaction.GetTransaction(id, responsew)
 	if transactionlist == nil {
-		http.Error(responsew, "Id is out of ramge", http.StatusInternalServerError)
+		http.Error(responsew, "Id is out of ramge", http.StatusBadRequest)
 	}
 	err := transactionlist.ToJSON(responsew)
 	if err != nil {
-		http.Error(responsew, "Unable to marshal json", http.StatusInternalServerError)
+		http.Error(responsew, "Unable to marshal json", http.StatusBadRequest)
 	}
 }
 

@@ -82,7 +82,7 @@ func GetTransactionsByUserId(id int, responsew http.ResponseWriter) *Transaction
 		err = res.Scan(&t.ID, &t.UserID, &t.Amount, &t.Status, &t.From, &t.FromID, &t.Comment)
 		if err != nil {
 			db.DB.L.Println("Scan: ", err.Error())
-			http.Error(responsew, err.Error(), http.StatusInternalServerError) // http.StatusBadRequest
+			http.Error(responsew, err.Error(), http.StatusBadRequest)
 			return nil
 		}
 		*ts = append(*ts, t)

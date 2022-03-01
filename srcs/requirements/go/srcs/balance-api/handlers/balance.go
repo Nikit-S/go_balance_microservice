@@ -33,7 +33,7 @@ func (bh *Balance) ServeHTTP(rw http.ResponseWriter, r *http.Request) {
 		}
 		err = balance.GetBalanceByUserId(b.UserID, rw).ToJSON(rw)
 		if err != nil {
-			http.Error(rw, "Unable to marshal json", http.StatusInternalServerError)
+			http.Error(rw, "Unable to marshal json", http.StatusBadRequest)
 		}
 	default:
 		bh.l.Printf("Got a balance default request\n")

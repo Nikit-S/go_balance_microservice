@@ -58,7 +58,7 @@ func GetBalanceList(responsew http.ResponseWriter) *Balances {
 		err = res.Scan(&b.ID, &b.UserID, &b.Balance)
 		if err != nil {
 			db.DB.L.Println("Scan: ", err.Error())
-			http.Error(responsew, err.Error(), http.StatusInternalServerError)
+			http.Error(responsew, err.Error(), http.StatusBadRequest)
 			return nil
 		}
 		*bs = append(*bs, b)
@@ -91,14 +91,14 @@ func GetBalance(id int, responsew http.ResponseWriter) *Balance {
 	res.Close()
 	if err != nil {
 		db.DB.L.Println("Scan: ", err.Error())
-		http.Error(responsew, err.Error(), http.StatusInternalServerError)
+		http.Error(responsew, err.Error(), http.StatusBadRequest)
 		return nil
 	}
 
 	err = tx.Commit()
 	if err != nil {
 		db.DB.L.Println("Commit: ", err.Error())
-		http.Error(responsew, err.Error(), http.StatusInternalServerError)
+		http.Error(responsew, err.Error(), http.StatusBadRequest)
 		return nil
 	}
 	return b
@@ -111,7 +111,6 @@ func GetBalanceByUserId(id int, responsew http.ResponseWriter) *Balance {
 	res, err := db.DB.Database.Query(qu)
 	if err != nil {
 		db.DB.L.Println("Err Query:", err.Error())
-		//http.Error(responsew, err.Error(), http.StatusBadRequest)
 		return nil
 	}
 	defer res.Close()
@@ -121,7 +120,6 @@ func GetBalanceByUserId(id int, responsew http.ResponseWriter) *Balance {
 
 	if err != nil {
 		db.DB.L.Println("Scan: ", err.Error())
-		//http.Error(responsew, err.Error(), http.StatusInternalServerError)
 		return nil
 	}
 	return b
